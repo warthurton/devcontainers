@@ -1,0 +1,65 @@
+{
+  "name": "Python Dev",
+  "image": "mcr.microsoft.com/devcontainers/python:3.13",
+  "features": {
+    // ── Base utilities (rarely changes — good cache anchor) ─────────
+    "ghcr.io/devcontainers/features/common-utils:2": {
+      "configureZshAsDefaultShell": true,
+      "installOhMyZsh": false,
+      "installOhMyZshConfig": false
+    },
+    "ghcr.io/devcontainers-extra/features/apt-packages:1": {
+      "packages": "ripgrep,eza,starship"
+    },
+
+    // ── Shell / UX ──────────────────────────────────────────────────
+    "ghcr.io/devcontainers-extra/features/fzf:1": {},
+    "ghcr.io/devcontainers-extra/features/zsh-plugins:0": {
+      "plugins": "ssh-agent",
+      "omzPlugins": "https://github.com/zsh-users/zsh-autosuggestions"
+    },
+    "ghcr.io/stuartleeks/dev-container-features/shell-history:0": {},
+
+    // ── Runtimes & SDKs ─────────────────────────────────────────────
+    // Node via nvm is already in the Python 3.13 base image
+
+    // ── Cloud / CI / DevOps tooling ─────────────────────────────────
+    "ghcr.io/devcontainers/features/azure-cli:1": {},
+    "ghcr.io/stuartleeks/dev-container-features/azure-cli-persistence:0": {},
+    "ghcr.io/azure/azure-dev/azd:0": {},
+    "ghcr.io/azure/azure-dev/azd-persistence:0": {},
+    "ghcr.io/devcontainers/features/github-cli:1": {},
+    "ghcr.io/joshuanianji/devcontainer-features/github-cli-persistence:1": {},
+    "ghcr.io/devcontainers/features/copilot-cli:1": {},
+    "ghcr.io/stuartleeks/dev-container-features/dev-tunnels:0": {},
+
+    // ── Secrets ─────────────────────────────────────────────────────
+    "ghcr.io/flexwie/devcontainer-features/op:1": {}
+  },
+  "customizations": {
+    "vscode": {
+      "settings": {},
+      "extensions": [
+        "charliermarsh.ruff",
+        "eamodio.gitlens",
+        "EditorConfig.EditorConfig",
+        "esbenp.prettier-vscode",
+        "github.vscode-github-actions",
+        "GitHub.copilot-chat",
+        "GitHub.vscode-pull-request-github",
+        "ms-azuretools.vscode-docker",
+        "ms-python.debugpy",
+        "ms-python.python",
+        "mutantdino.resourcemonitor",
+        "redhat.vscode-xml",
+        "redhat.vscode-yaml",
+        "tamasfe.even-better-toml"
+      ]
+    }
+  },
+  "postCreateCommand": "bash .devcontainer/post-create.sh",
+  "remoteEnv": {
+    "WAKATIME_API_KEY": "${localEnv:WAKATIME_API_KEY}"
+  },
+  "forwardPorts": [7071, 10000, 10001, 10002]
+}

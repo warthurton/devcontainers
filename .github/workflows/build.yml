@@ -1,0 +1,179 @@
+name: Build and Publish Dev Containers
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "**/devcontainer.json"
+      - ".github/workflows/build.yml"
+  pull_request:
+    paths:
+      - "**/devcontainer.json"
+      - ".github/workflows/build.yml"
+  schedule:
+    # Weekly rebuild every Monday at 06:00 UTC to pick up base image updates
+    - cron: "0 6 * * 1"
+  workflow_dispatch:
+
+jobs:
+  # ── Discover which containers exist ──────────────────────────────────────────
+  detect-containers:
+    runs-on: ubuntu-latest
+    outputs:
+      containers: ${{ steps.find.outputs.containers }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Find devcontainer definitions
+        id: find
+        run: |
+          # Collect every directory that contains a devcontainer.json at its root
+          containers=$(
+            find . -name 'devcontainer.json' -not -path './.devcontainer/*' \
+              | sed 's|/devcontainer.json||; s|^\./||' \
+              | sort \
+              | jq -R -s -c 'split("\n") | map(select(length > 0))'
+          )
+          echo "containers=${containers}" >> "$GITHUB_OUTPUT"
+          echo "Discovered: ${containers}"
+
+  # ── Build (and push on main) each container ──────────────────────────────────
+  build:
+    needs: detect-containers
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      fail-fast: false
+      matrix:
+        container: ${{ fromJson(needs.detect-containers.outputs.containers) }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Log in to GitHub Container Registry
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push — ${{ matrix.container }}
+        uses: devcontainers/ci@v0.3
+        with:
+          imageName: ghcr.io/${{ github.repository_owner }}/devcontainer-${{
+            matrix.container }}
+          imageTag: latest,${{ github.sha }}
+          # devcontainer.json lives directly in the container folder, not in .devcontainer/
+          configFile: ${{ matrix.container }}/devcontainer.json
+          # push on pushes to main only; PRs build but never push
+          push: filter
+          refFilterForPush: refs/heads/main
+          cacheFrom: ghcr.io/${{ github.repository_owner }}/devcontainer-${{
+            matrix.container }}
+
+      - name: Generate documentation — ${{ matrix.container }}
+        if: github.event_name != 'pull_request'
+        run: |
+          OUTDIR="generated-docs/${{ matrix.container }}"
+          mkdir -p "${OUTDIR}"
+
+          # Dump the resolved configuration as JSON via the devcontainer CLI
+          npm install -g @devcontainers/cli --silent
+          devcontainer read-configuration \
+            --workspace-folder "${{ matrix.container }}" \
+            --config "${{ matrix.container }}/devcontainer.json" \
+            --include-features-configuration \
+            > "${OUTDIR}/configuration.json"
+
+          # Render a human-readable Markdown summary
+          python3 - <<'EOF'
+          import json, pathlib, os
+
+          container = os.environ["CONTAINER"]
+          src = pathlib.Path(f"generated-docs/{container}/configuration.json")
+          cfg = json.loads(src.read_text()).get("configuration", {})
+
+          lines = [
+            f"# {cfg.get('name', container)}",
+            "",
+            f"Image: `{cfg.get('image', 'custom build')}`",
+            "",
+            "## Features",
+            "",
+          ]
+          for feat, opts in (cfg.get("features") or {}).items():
+            lines.append(f"- `{feat}`")
+            for k, v in (opts or {}).items():
+              lines.append(f"  - `{k}`: `{v}`")
+
+          exts = (cfg.get("customizations") or {}).get("vscode", {}).get("extensions", [])
+          if exts:
+            lines += ["", "## VS Code Extensions", ""]
+            for e in exts:
+              lines.append(f"- `{e}`")
+
+          pathlib.Path(f"generated-docs/{container}/README.md").write_text("\n".join(lines) + "\n")
+          print("Documentation written.")
+          EOF
+        env:
+          CONTAINER: ${{ matrix.container }}
+
+      - name: Upload generated docs
+        if: github.event_name != 'pull_request'
+        uses: actions/upload-artifact@v4
+        with:
+          name: docs-${{ matrix.container }}
+          path: generated-docs/${{ matrix.container }}
+
+  # ── Commit updated documentation ─────────────────────────────────────────────
+  update-docs:
+    needs: build
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download all doc artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: docs-*
+          path: /tmp/all-docs
+          merge-multiple: false
+
+      - name: Copy docs into repo
+        run: |
+          mkdir -p docs
+          for dir in /tmp/all-docs/docs-*/; do
+            container=$(basename "$dir" | sed 's/^docs-//')
+            mkdir -p "docs/${container}"
+            echo "Copying docs for ${container}"
+            cp -r "$dir/." "docs/${container}/"
+          done
+
+      - name: Check for documentation changes
+        id: diff
+        run: |
+          git diff --quiet docs/ && echo "changed=false" >> "$GITHUB_OUTPUT" \
+            || echo "changed=true" >> "$GITHUB_OUTPUT"
+
+      - name: Open PR with documentation updates
+        if: steps.diff.outputs.changed == 'true'
+        uses: peter-evans/create-pull-request@v6
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          branch: chore/update-docs
+          commit-message: "docs: regenerate container reference docs"
+          title: "docs: update generated container documentation"
+          body: |
+            Automated PR to update generated dev container documentation.
+
+            Triggered by: ${{ github.event_name }} on `${{ github.ref_name }}`
+          labels: documentation,automated
