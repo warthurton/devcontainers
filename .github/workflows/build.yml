@@ -151,12 +151,14 @@ jobs:
       - name: Copy docs into repo
         run: |
           mkdir -p docs
+          shopt -s nullglob
           for dir in /tmp/all-docs/docs-*/; do
             container=$(basename "$dir" | sed 's/^docs-//')
             mkdir -p "docs/${container}"
             echo "Copying docs for ${container}"
             cp -r "$dir/." "docs/${container}/"
           done
+          shopt -u nullglob
 
       - name: Check for documentation changes
         id: diff
