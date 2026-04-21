@@ -34,6 +34,7 @@ The workflow:
 - Builds each container in a matrix using `devcontainers/ci`.
 - Pushes images to GHCR on `main`.
 - Generates container documentation from resolved config.
+- Safely skips docs copy when no `docs-*` artifacts are present.
 - Opens a PR when generated docs changed.
 
 ### Triggers
