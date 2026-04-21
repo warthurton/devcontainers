@@ -23,7 +23,7 @@ jobs:
     outputs:
       containers: ${{ steps.find.outputs.containers }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Find devcontainer definitions
         id: find
@@ -51,11 +51,11 @@ jobs:
         container: ${{ fromJson(needs.detect-containers.outputs.containers) }}
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Log in to GitHub Container Registry
         if: github.event_name != 'pull_request'
-        uses: docker/login-action@v3
+        uses: docker/login-action@v4
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
@@ -124,7 +124,7 @@ jobs:
 
       - name: Upload generated docs
         if: github.event_name != 'pull_request'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: docs-${{ matrix.container }}
           path: generated-docs/${{ matrix.container }}
@@ -139,10 +139,10 @@ jobs:
       pull-requests: write
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Download all doc artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           pattern: docs-*
           path: /tmp/all-docs
@@ -166,7 +166,7 @@ jobs:
 
       - name: Open PR with documentation updates
         if: steps.diff.outputs.changed == 'true'
-        uses: peter-evans/create-pull-request@v6
+        uses: peter-evans/create-pull-request@v8
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           branch: chore/update-docs
